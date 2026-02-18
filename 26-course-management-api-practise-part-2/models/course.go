@@ -25,3 +25,21 @@ type UpdateCourseRequest struct {
 	CoursePrice int    `json:"coursePrice"`
 	AuthorID    int    `json:"authorId"`
 }
+
+// Pagination and filter for list courses
+type CourseListParams struct {
+	Page     int    // 1-based
+	Limit    int    // default 10, max 100
+	Search   string // search by course name (partial match)
+	AuthorID int    // filter by author (0 = no filter)
+	MinPrice int    // filter min price (0 = no filter)
+	MaxPrice int    // filter max price (0 = no filter)
+}
+
+type PaginatedCoursesResponse struct {
+	Courses   []CourseResponse `json:"courses"`
+	Page      int              `json:"page"`
+	Limit     int              `json:"limit"`
+	Total     int              `json:"total"`
+	TotalPage int              `json:"totalPage"`
+}

@@ -8,17 +8,31 @@ import (
 	"github.com/SaddamMohammad1/26-course-management-api-practise/repository"
 )
 
-func GetCourses() ([]models.CourseResponse, error) {
-
-	data, err := repository.GetAllCourses()
-	if err != nil {
-		return nil, err
+func GetCourses(params models.CourseListParams) (models.PaginatedCoursesResponse, error) {
+	// Defaults and caps
+	if params.Limit <= 0 {
+		params.Limit = 10
+	}
+	if params.Limit > 100 {
+		params.Limit = 100
+	}
+	if params.Page <= 0 {
+		params.Page = 1
 	}
 
-	var result []models.CourseResponse
+	data, err := repository.GetAllCourses(params)
+	if err != nil {
+		return models.PaginatedCoursesResponse{}, err
+	}
 
+	total, err := repository.CountCourses(params)
+	if err != nil {
+		return models.PaginatedCoursesResponse{}, err
+	}
+
+	var courses []models.CourseResponse
 	for _, item := range data {
-		result = append(result, models.CourseResponse{
+		courses = append(courses, models.CourseResponse{
 			CourseId:    item.Course.CourseId,
 			CourseName:  item.Course.CourseName,
 			CoursePrice: item.Course.CoursePrice,
@@ -26,7 +40,18 @@ func GetCourses() ([]models.CourseResponse, error) {
 		})
 	}
 
-	return result, nil
+	totalPage := (total + params.Limit - 1) / params.Limit
+	if totalPage < 1 {
+		totalPage = 1
+	}
+
+	return models.PaginatedCoursesResponse{
+		Courses:   courses,
+		Page:      params.Page,
+		Limit:     params.Limit,
+		Total:     total,
+		TotalPage: totalPage,
+	}, nil
 }
 
 func GetOneCourse(courseId int) (models.CourseResponse, error) {

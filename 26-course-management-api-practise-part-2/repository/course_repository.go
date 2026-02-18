@@ -2,6 +2,8 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"github.com/SaddamMohammad1/26-course-management-api-practise/config"
 	"github.com/SaddamMohammad1/26-course-management-api-practise/models"
@@ -12,28 +14,69 @@ type CourseWithAuthor struct {
 	Author models.Author
 }
 
-// Get all courses with their authors from the database and return them as a list of CourseWithAuthor structs
-func GetAllCourses() ([]CourseWithAuthor, error) {
+// buildWhereClause builds WHERE conditions and args for list query
+func buildCourseListWhere(params models.CourseListParams) (where string, args []interface{}) {
+	var conditions []string
+	var argNum int
+	if params.Search != "" {
+		argNum++
+		conditions = append(conditions, fmt.Sprintf("c.course_name ILIKE $%d", argNum))
+		args = append(args, "%"+params.Search+"%")
+	}
+	if params.AuthorID > 0 {
+		argNum++
+		conditions = append(conditions, fmt.Sprintf("c.author_id = $%d", argNum))
+		args = append(args, params.AuthorID)
+	}
+	if params.MinPrice > 0 {
+		argNum++
+		conditions = append(conditions, fmt.Sprintf("c.course_price >= $%d", argNum))
+		args = append(args, params.MinPrice)
+	}
+	if params.MaxPrice > 0 {
+		argNum++
+		conditions = append(conditions, fmt.Sprintf("c.course_price <= $%d", argNum))
+		args = append(args, params.MaxPrice)
+	}
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
+	}
+	return where, args
+}
 
+// CountCourses returns total count for given filters (no pagination)
+func CountCourses(params models.CourseListParams) (int, error) {
+	where, args := buildCourseListWhere(params)
+	query := `SELECT COUNT(*) FROM courses c LEFT JOIN authors a ON c.author_id = a.id` + where
+	var total int
+	err := config.DB.QueryRow(query, args...).Scan(&total)
+	return total, err
+}
+
+// GetAllCourses returns paginated, filtered, and searched courses with authors
+func GetAllCourses(params models.CourseListParams) ([]CourseWithAuthor, error) {
+	where, args := buildCourseListWhere(params)
+	offset := (params.Page - 1) * params.Limit
+	args = append(args, params.Limit, offset)
+	n := len(args)
 	query := `
 	SELECT c.course_id, c.course_name, c.course_price,
 	       a.id, a.fullname, a.website
 	FROM courses c
 	LEFT JOIN authors a ON c.author_id = a.id
-	`
+	` + where + fmt.Sprintf(`
+	ORDER BY c.course_id
+	LIMIT $%d OFFSET $%d`, n-1, n)
 
-	rows, err := config.DB.Query(query)
+	rows, err := config.DB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	var list []CourseWithAuthor
-
 	for rows.Next() {
-
 		var item CourseWithAuthor
-
 		err := rows.Scan(
 			&item.Course.CourseId,
 			&item.Course.CourseName,
@@ -45,29 +88,8 @@ func GetAllCourses() ([]CourseWithAuthor, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		list = append(list, item)
-
-		// print the struct in a readable format
-		// fmt.Printf("\nSTRUCT FORMAT: %+v\n", item)
-
-		// Output
-		// {
-		// 	"Course": {
-		// 		"CourseId": 1,
-		// 		"CourseName": "Go Programming Masterclass",
-		// 		"CoursePrice": 4999,
-		// 		"AuthorID": 0
-		// 	},
-		// 	"Author": {
-		// 		"ID": 1,
-		// 		"Fullname": "Hitesh Choudhary",
-		// 		"Website": "https://hitesh.ai"
-		// 	}
-		// }
-
 	}
-
 	return list, nil
 }
 
